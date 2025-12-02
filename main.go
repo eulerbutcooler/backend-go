@@ -1,14 +1,91 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
 var port = 8080
+
+type User struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+var (
+	users = make(map[int]User)
+	idSeq = 1
+	mutex = &sync.Mutex{}
+)
+
+func usersHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	switch r.Method {
+	case "GET":
+		mutex.Lock()
+		defer mutex.Unlock()
+		usersList := make([]User, 0, len(users))
+		for _, user := range users {
+			usersList = append(usersList, user)
+		}
+		json.NewEncoder(w).Encode(usersList)
+	case "POST":
+		var user User
+		if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadGateway)
+			return
+		}
+		mutex.Lock()
+		user.ID = idSeq
+		idSeq++
+		users[user.ID] = user // This line stores the newly created user in the users map using the generated ID as the key.
+		mutex.Unlock()
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(user)
+	default:
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func userHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	var id int
+	if _, err := fmt.Sscanf(r.URL.Path, "/users/%d", &id); err != nil {
+		http.Error(w, "Invalid User ID", http.StatusBadRequest)
+		return
+	}
+	mutex.Lock()
+	defer mutex.Unlock()
+	user, ok := users[id]
+	if !ok {
+		http.Error(w, "User Not Found", http.StatusNotFound)
+		return
+	}
+	switch r.Method {
+	case "GET":
+		json.NewEncoder(w).Encode(user)
+	case "PUT":
+		var updatedUser User
+		if err := json.NewDecoder(r.Body).Decode(&updatedUser); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		updatedUser.ID = id
+		users[id] = updatedUser
+		json.NewEncoder(w).Encode(updatedUser)
+	case "DELETE":
+		delete(users, id)
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+	}
+}
 
 // *http.Request -> location -> User requests and parameters are present -> user provided data
 // http.ResponseWriter -> Backend writes its response
@@ -84,11 +161,10 @@ func main() {
 	mux.Handle("/", logMiddleware(headerMiddleware(http.HandlerFunc(homeHandler))))
 	mux.Handle("/about/", logMiddleware(headerMiddleware(http.HandlerFunc(aboutHandler))))
 	mux.Handle("/username/", logMiddleware(headerMiddleware(http.HandlerFunc(usernameHandler))))
+	mux.Handle("/users", logMiddleware(http.HandlerFunc(usersHandler)))
+	mux.Handle("/users/", logMiddleware(http.HandlerFunc(userHandler)))
 	// localhost:8080/api -> called -> handler -> function
 	mux.HandleFunc("/api", apiHandler)
 	log.Printf("Starting server at port %d", port)
-	err := http.ListenAndServe(":8080", mux)
-	if err != nil {
-		log.Fatal("khel khatam", err)
-	}
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), mux))
 }
