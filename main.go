@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -8,6 +9,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/eulerbutcooler/backend-go/internal/db"
+	_ "github.com/lib/pq"
 )
 
 var port = 8080
@@ -60,24 +64,45 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch r.Method {
 	case "GET":
-		mutex.Lock()
-		defer mutex.Unlock()
-		usersList := make([]User, 0, len(users))
-		for _, user := range users {
-			usersList = append(usersList, user)
+		rows, err := db.GetDB().Query("SELECT id, name, email FROM users")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
-		json.NewEncoder(w).Encode(usersList)
+		defer rows.Close()
+		var users []User
+		for rows.Next() {
+			var u User
+			if err := rows.Scan(&u.ID, &u.Name, &u.Email); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			users = append(users, u)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(users)
 	case "POST":
 		var user User
 		if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadGateway)
 			return
 		}
-		mutex.Lock()
-		user.ID = idSeq
-		idSeq++
-		users[user.ID] = user // This line stores the newly created user in the users map using the generated ID as the key.
-		mutex.Unlock()
+		if err := user.Validate(); err != nil {
+			response := map[string]string{"error": err.Error()}
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		err := db.GetDB().QueryRow("INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id", user.Name, user.Email).Scan(&user.ID)
+		if err != nil {
+			http.Error(w, "Failed to insert user", http.StatusInternalServerError)
+			return
+		}
+		// mutex.Lock()
+		// user.ID = idSeq
+		// idSeq++
+		// users[user.ID] = user // This line stores the newly created user in the users map using the generated ID as the key.
+		// mutex.Unlock()
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(user)
 	default:
@@ -92,15 +117,24 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid User ID", http.StatusBadRequest)
 		return
 	}
-	mutex.Lock()
-	defer mutex.Unlock()
-	user, ok := users[id]
-	if !ok {
-		http.Error(w, "User Not Found", http.StatusNotFound)
-		return
-	}
+	// mutex.Lock()
+	// defer mutex.Unlock()
+	// user, ok := users[id]
+	// if !ok {
+	// 	http.Error(w, "User Not Found", http.StatusNotFound)
+	// 	return
+	// }
 	switch r.Method {
 	case "GET":
+		var user User
+		err := db.GetDB().QueryRow("SELECT * FROM users where id = $1", id).Scan(&user.ID, &user.Name, &user.Email)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				http.Error(w, "User Not Found", http.StatusNotFound)
+			} else {
+				http.Error(w, "Database error", http.StatusInternalServerError)
+			}
+		}
 		json.NewEncoder(w).Encode(user)
 	case "PUT":
 		var updatedUser User
@@ -108,11 +142,19 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
-		updatedUser.ID = id
-		users[id] = updatedUser
+		err := db.GetDB().QueryRow("UPDATE users SET name=$1, email=$2 WHERE id=$3 RETURNING name, email, id", updatedUser.Name, updatedUser.Email, id).Scan(&updatedUser.Name, &updatedUser.Email, &updatedUser.ID)
+		if err != nil {
+			http.Error(w, "Failed to update user", http.StatusInternalServerError)
+			log.Printf("Update err: %v", err)
+			return
+		}
 		json.NewEncoder(w).Encode(updatedUser)
 	case "DELETE":
-		delete(users, id)
+		_, err := db.GetDB().Exec("DELETE from users WHERE id=$1", id)
+		if err != nil {
+			http.Error(w, "Failed to delete user", http.StatusInternalServerError)
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -189,6 +231,9 @@ func usernameHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	if err := db.InitDB(); err != nil {
+		log.Fatal("Failed to initialize database: %w", err)
+	}
 	mux := http.NewServeMux()
 	mux.Handle("/", logMiddleware(headerMiddleware(http.HandlerFunc(homeHandler))))
 	mux.Handle("/about/", logMiddleware(headerMiddleware(http.HandlerFunc(aboutHandler))))
