@@ -48,7 +48,7 @@ jobs:
           script: |
             mkdir -p ~/app/backend-go
             cd ~/app/backend-go
-            if [! -d ".git" ]; then
+            if [ ! -d ".git" ]; then
             echo "Cloning repository..."
             git clone https://github.com/${{github.repository}} .
             else
