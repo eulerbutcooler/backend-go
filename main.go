@@ -221,7 +221,7 @@ func usernameHandler(w http.ResponseWriter, r *http.Request) {
 	includeDets := r.URL.Query().Get("includedetails")
 	if len(pathSeg) >= 3 && pathSeg[1] == "username" {
 		userId := pathSeg[2]
-		fmt.Fprintf(w, "User id: %s\n", userId)
+		fmt.Fprintf(w, "User ID: %s\n", userId)
 		if includeDets == "true" {
 			w.Write([]byte("Details are included\n"))
 		}
