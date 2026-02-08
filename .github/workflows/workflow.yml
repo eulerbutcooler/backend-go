@@ -51,13 +51,17 @@ jobs:
           script: |
             mkdir -p ~/app
             cd ~/app/
-            if [ ! -d ".git" ]; then
+            if [ ! -d ~/app/backend-go/.git ]; then
             echo "Cloning repository..."
+            rm -rf ~/app/backend-go
             git clone https://github.com/${{github.repository}} .
             else
             echo "Pulling latest changes..."
+            cd ~/app/backend-go
             git pull origin main
             fi
+
+            cd ~/app/backend-go
 
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             cat > docker-compose.prod.yml << 'EOF'
