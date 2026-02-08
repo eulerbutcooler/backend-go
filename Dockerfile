@@ -1,17 +1,14 @@
-FROM golang:1.22
+FROM golang:1.22 AS builder
 
 WORKDIR /app
 
-# COPY go.mod ./
-# COPY go.sum ./
-# COPY internal/db/db.go ./internal/db
-# COPY main.go ./
+COPY go.mod go.sum  ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o backend-go
 
-COPY . ./
-
-RUN go mod tidy
-RUN go build -o backend-go
-
+FROM gcr.io/distroless/base-debian12
+WORKDIR /app
+COPY --from=builder /app/backend-go .
 EXPOSE 8080
-
-CMD [ "./backend-go" ]
+ENTRYPOINT [ "./backend-go" ]

@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: backend-db
+    networks:
+      - backend-net
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: bckndtest
+    healthcheck: # Wait until Postgres is ready
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      retries: 5
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - "./internal/db/init.sql:/docker-entrypoint-initdb.d/init.sql"
+  app:
+    build:
+      context: .
+    container_name: backend-app
+    networks:
+      - backend-net
+    environment:
+      DB_HOST: backend-db
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: secret
+      DB_NAME: bckndtest
+      DB_SSLMODE: disable
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+networks:
+  backend-net:
+    driver: bridge
+
+volumes:
+  db-data:

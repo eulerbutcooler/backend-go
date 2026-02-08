@@ -84,7 +84,7 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 	case "POST":
 		var user User
 		if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadGateway)
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
 		if err := user.Validate(); err != nil {
@@ -133,6 +133,7 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "User Not Found", http.StatusNotFound)
 			} else {
 				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
 			}
 		}
 		json.NewEncoder(w).Encode(user)
@@ -183,8 +184,8 @@ func headerMiddleware(next http.Handler) http.Handler {
 func logMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		log.Printf("%s %s %s\n", r.Method, r.RequestURI, time.Since(start))
 		next.ServeHTTP(w, r)
+		log.Printf("%s %s %s\n", r.Method, r.RequestURI, time.Since(start))
 	})
 }
 
@@ -232,7 +233,7 @@ func usernameHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	if err := db.InitDB(); err != nil {
-		log.Fatal("Failed to initialize database: %w", err)
+		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/", logMiddleware(headerMiddleware(http.HandlerFunc(homeHandler))))
