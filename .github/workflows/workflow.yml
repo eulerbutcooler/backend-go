@@ -54,7 +54,7 @@ jobs:
             if [ ! -d ~/app/backend-go/.git ]; then
             echo "Cloning repository..."
             rm -rf ~/app/backend-go
-            git clone https://github.com/${{github.repository}} .
+            git clone https://github.com/${{github.repository}} ~/app/backend-go
             else
             echo "Pulling latest changes..."
             cd ~/app/backend-go
