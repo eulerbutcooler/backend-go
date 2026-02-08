@@ -117,13 +117,6 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid User ID", http.StatusBadRequest)
 		return
 	}
-	// mutex.Lock()
-	// defer mutex.Unlock()
-	// user, ok := users[id]
-	// if !ok {
-	// 	http.Error(w, "User Not Found", http.StatusNotFound)
-	// 	return
-	// }
 	switch r.Method {
 	case "GET":
 		var user User
