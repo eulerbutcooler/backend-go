@@ -237,5 +237,12 @@ func main() {
 	// localhost:8080/api -> called -> handler -> function
 	mux.HandleFunc("/api", apiHandler)
 	log.Printf("Starting server at port %d", port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), mux))
+	srv := &http.Server{
+		Addr:         fmt.Sprintf(":%d", port),
+		Handler:      mux,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+	log.Fatal(srv.ListenAndServe())
 }
