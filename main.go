@@ -64,7 +64,7 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch r.Method {
 	case "GET":
-		rows, err := db.GetDB().Query("SELECT id, name, email FROM users")
+		rows, err := db.GetDB().QueryContext(r.Context(), "SELECT id, name, email FROM users")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -93,7 +93,7 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(response)
 			return
 		}
-		err := db.GetDB().QueryRow("INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id", user.Name, user.Email).Scan(&user.ID)
+		err := db.GetDB().QueryRowContext(r.Context(), "INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id", user.Name, user.Email).Scan(&user.ID)
 		if err != nil {
 			http.Error(w, "Failed to insert user", http.StatusInternalServerError)
 			return
@@ -120,7 +120,7 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
 		var user User
-		err := db.GetDB().QueryRow("SELECT * FROM users where id = $1", id).Scan(&user.ID, &user.Name, &user.Email)
+		err := db.GetDB().QueryRowContext(r.Context(), "SELECT * FROM users where id = $1", id).Scan(&user.ID, &user.Name, &user.Email)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				http.Error(w, "User Not Found", http.StatusNotFound)
@@ -136,7 +136,7 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
-		err := db.GetDB().QueryRow("UPDATE users SET name=$1, email=$2 WHERE id=$3 RETURNING name, email, id", updatedUser.Name, updatedUser.Email, id).Scan(&updatedUser.Name, &updatedUser.Email, &updatedUser.ID)
+		err := db.GetDB().QueryRowContext(r.Context(), "UPDATE users SET name=$1, email=$2 WHERE id=$3 RETURNING name, email, id", updatedUser.Name, updatedUser.Email, id).Scan(&updatedUser.Name, &updatedUser.Email, &updatedUser.ID)
 		if err != nil {
 			http.Error(w, "Failed to update user", http.StatusInternalServerError)
 			log.Printf("Update err: %v", err)
@@ -144,7 +144,7 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		json.NewEncoder(w).Encode(updatedUser)
 	case "DELETE":
-		_, err := db.GetDB().Exec("DELETE from users WHERE id=$1", id)
+		_, err := db.GetDB().ExecContext(r.Context(), "DELETE from users WHERE id=$1", id)
 		if err != nil {
 			http.Error(w, "Failed to delete user", http.StatusInternalServerError)
 			return
